@@ -544,6 +544,7 @@ function Get-SingleSubscriptionCarbonData {
 
 # 🔄 CloudCostChefs Function: Data Transformation Magic
 # Converts Azure's JSON response into clean, dashboardable CSV data
+# Converts Azure's JSON response into clean, dashboardable CSV data
 function ConvertTo-CarbonDataTable {
     param(
         [object]$ApiResponse,
@@ -566,10 +567,9 @@ function ConvertTo-CarbonDataTable {
         switch ($ReportType) {
             "ItemDetailsReport" {
                 if ($item.dataType -eq "ResourceItemDetailsData") {
-                    # 🧮 CloudCostChefs Unit Conversion: API returns metric tonnes, we also want kg
-                    $emissionsTonnes = if ($item.latestMonthEmissions) { $item.latestMonthEmissions } else { 0 }
-                    # 🚨 CloudCostChefs Bug Fix: The original had a bug here - was multiplying tonnes by 1000 incorrectly
-                    $emissionsKg = $emissionsTonnes * 1000  # Convert tonnes to kg
+                    # 🔧 CloudCostChefs FIXED: API returns values in KG, not tonnes!
+                    $emissionsKg = if ($item.latestMonthEmissions) { $item.latestMonthEmissions } else { 0 }
+                    $emissionsTonnes = $emissionsKg / 1000  # Convert kg to tonnes
                     
                     # 🎯 CloudCostChefs: Defensive programming - handle missing/null values
                     $serviceValue = if ($item.resourceType) { $item.resourceType } else { "Unknown" }
@@ -579,9 +579,9 @@ function ConvertTo-CarbonDataTable {
                     $subscriptionIdValue = if ($item.subscriptionId) { $item.subscriptionId } else { "N/A" }
                     $resourceIdValue = if ($item.resourceId) { $item.resourceId } else { "N/A" }
                     $categoryTypeValue = if ($item.categoryType) { $item.categoryType } else { "N/A" }
-                    $previousMonthValue = if ($item.previousMonthEmissions) { $item.previousMonthEmissions } else { 0 }
+                    $previousMonthValue = if ($item.previousMonthEmissions) { $item.previousMonthEmissions / 1000 } else { 0 }  # Also convert to tonnes
                     $monthOverMonthValue = if ($item.monthOverMonthEmissionsChangeRatio) { $item.monthOverMonthEmissionsChangeRatio } else { 0 }
-                    $monthlyChangeValue = if ($item.monthlyEmissionsChangeValue) { $item.monthlyEmissionsChangeValue } else { 0 }
+                    $monthlyChangeValue = if ($item.monthlyEmissionsChangeValue) { $item.monthlyEmissionsChangeValue / 1000 } else { 0 }  # Convert to tonnes
                     
                     # 🏗️ CloudCostChefs: Build standardized data structure for dashboard consumption
                     $carbonData += [PSCustomObject]@{
@@ -594,11 +594,11 @@ function ConvertTo-CarbonDataTable {
                         SubscriptionId        = $subscriptionIdValue
                         ResourceId            = $resourceIdValue
                         CategoryType          = $categoryTypeValue
-                        CarbonEmissionsKg     = [math]::Round($emissionsKg, 4)      # 🎯 4 decimal precision for kg
-                        CarbonEmissionsTonnes = [math]::Round($emissionsTonnes, 6)   # 🎯 6 decimal precision for tonnes
-                        PreviousMonthEmissions = [math]::Round($previousMonthValue, 6)
-                        MonthOverMonthChange  = [math]::Round($monthOverMonthValue, 4)  # Percentage change
-                        MonthlyChangeValue    = [math]::Round($monthlyChangeValue, 6)
+                        CarbonEmissionsKg     = [math]::Round($emissionsKg, 4)          # 🎯 No conversion needed - already in kg
+                        CarbonEmissionsTonnes = [math]::Round($emissionsTonnes, 6)       # 🎯 Convert kg to tonnes
+                        PreviousMonthEmissions = [math]::Round($previousMonthValue, 6)   # In tonnes
+                        MonthOverMonthChange  = [math]::Round($monthOverMonthValue, 4)   # Percentage change
+                        MonthlyChangeValue    = [math]::Round($monthlyChangeValue, 6)    # In tonnes
                         Cost                  = 0    # 💰 CloudCostChefs: Carbon API doesn't include cost data
                         Currency              = "USD"
                         ReportType            = $ReportType
@@ -608,8 +608,9 @@ function ConvertTo-CarbonDataTable {
             }
             "MonthlySummaryReport" {
                 if ($item.dataType -eq "MonthlySummaryData") {
-                    $emissionsTonnes = if ($item.totalEmissions) { $item.totalEmissions } else { 0 }
-                    $emissionsKg = $emissionsTonnes * 1000
+                    # 🔧 CloudCostChefs FIXED: API returns kg, convert to tonnes
+                    $emissionsKg = if ($item.totalEmissions) { $item.totalEmissions } else { 0 }
+                    $emissionsTonnes = $emissionsKg / 1000
                     $monthValue = if ($item.month) { $item.month } else { $StartDate }
                     
                     # 📊 CloudCostChefs: Monthly summary for trend analysis
@@ -633,11 +634,12 @@ function ConvertTo-CarbonDataTable {
             }
             "OverallSummaryReport" {
                 if ($item.dataType -eq "OverallSummaryData") {
-                    $emissionsTonnes = if ($item.latestMonthEmissions) { $item.latestMonthEmissions } else { 0 }
-                    $emissionsKg = $emissionsTonnes * 1000
-                    $previousMonthValue = if ($item.previousMonthEmissions) { $item.previousMonthEmissions } else { 0 }
+                    # 🔧 CloudCostChefs FIXED: API returns kg, convert to tonnes
+                    $emissionsKg = if ($item.latestMonthEmissions) { $item.latestMonthEmissions } else { 0 }
+                    $emissionsTonnes = $emissionsKg / 1000
+                    $previousMonthValue = if ($item.previousMonthEmissions) { $item.previousMonthEmissions / 1000 } else { 0 }  # Convert to tonnes
                     $monthOverMonthValue = if ($item.monthOverMonthEmissionsChangeRatio) { $item.monthOverMonthEmissionsChangeRatio } else { 0 }
-                    $monthlyChangeValue = if ($item.monthlyEmissionsChangeValue) { $item.monthlyEmissionsChangeValue } else { 0 }
+                    $monthlyChangeValue = if ($item.monthlyEmissionsChangeValue) { $item.monthlyEmissionsChangeValue / 1000 } else { 0 }  # Convert to tonnes
                     
                     # 📈 CloudCostChefs: Perfect for executive dashboards
                     $carbonData += [PSCustomObject]@{
@@ -661,9 +663,9 @@ function ConvertTo-CarbonDataTable {
                 }
             }
             default {
-                # 🔧 CloudCostChefs: Generic handler for other report types
-                $emissionsTonnes = if ($item.latestMonthEmissions) { $item.latestMonthEmissions } elseif ($item.carbonEmissions) { $item.carbonEmissions } else { 0 }
-                $emissionsKg = $emissionsTonnes * 1000
+                # 🔧 CloudCostChefs FIXED: Generic handler - API returns kg
+                $emissionsKg = if ($item.latestMonthEmissions) { $item.latestMonthEmissions } elseif ($item.carbonEmissions) { $item.carbonEmissions } else { 0 }
+                $emissionsTonnes = $emissionsKg / 1000  # Convert kg to tonnes
                 
                 # 🛡️ CloudCostChefs: More defensive programming for variable API responses
                 $serviceValue = if ($item.resourceType) { $item.resourceType } elseif ($item.service) { $item.service } else { "Unknown" }
@@ -681,8 +683,8 @@ function ConvertTo-CarbonDataTable {
                     ResourceGroup         = $resourceGroupValue
                     Region                = $regionValue
                     SubscriptionId        = $subscriptionIdValue
-                    CarbonEmissionsKg     = [math]::Round($emissionsKg, 4)
-                    CarbonEmissionsTonnes = [math]::Round($emissionsTonnes, 6)
+                    CarbonEmissionsKg     = [math]::Round($emissionsKg, 4)          # No conversion needed
+                    CarbonEmissionsTonnes = [math]::Round($emissionsTonnes, 6)       # Convert kg to tonnes
                     Cost                  = 0
                     Currency              = "USD"
                     ReportType            = $ReportType
@@ -756,7 +758,7 @@ function Get-CarbonSummaryStats {
     $summary = @{
         TotalRecords         = $CarbonData.Count
         TotalCarbonTonnes    = [math]::Round($totalEmissions, 6)     # High precision for compliance reporting
-        TotalCarbonKg        = [math]::Round($totalEmissions * 1000, 2)  # More intuitive for smaller values
+        TotalCarbonKg        = [math]::Round($totalEmissions * 1000, 2)  # Convert tonnes back to kg for display
         TotalCost            = [math]::Round($totalCost, 2)         # Standard currency precision
         DateRange            = @{
             Start = ($CarbonData | Sort-Object Date | Select-Object -First 1).Date
